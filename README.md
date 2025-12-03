@@ -16,3 +16,14 @@ Here are the complete rules for Rock–Paper–Scissors–Lizard–Spock:
 - Lizard poisons Spock
 - Spock smashes Scissors
 - Spock vaporizes Rock
+
+References
+
+Flaticon
+https://www.flaticon.com
+
+The 5 symbols used here to represent the rock, paper, scissors, lizard and spock were taken from the Flaticon's website.
+
+Freepik
+The game's background image was set from the Freepik's website. Here's the direct link to download it:
+https://www.freepik.com/free-psd/gradient-abstract-borders_49681453.htm#from_element=cross_selling__psd
