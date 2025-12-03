@@ -99,6 +99,139 @@ const Game = () => {
 
     resizeCanvasToDisplaySize();
 
+    // Drag-and-drop state (for pre-start manual positioning)
+    let isDragging = false;
+    let dragIndex = -1;
+    let dragOffsetX = 0;
+    let dragOffsetY = 0;
+
+    const drawFrame = () => {
+      resizeCanvasToDisplaySize();
+      const width = canvas.clientWidth;
+      const height = canvas.clientHeight;
+      ctx.clearRect(0, 0, width, height);
+      entities.forEach((entity) => {
+        const { x, y, img } = entity;
+        if (img) {
+          ctx.drawImage(img, x, y, ENTITY_SIZE, ENTITY_SIZE);
+        }
+      });
+    };
+
+    const getPointerPosition = (event) => {
+      const rect = canvas.getBoundingClientRect();
+      const clientX =
+        "touches" in event ? event.touches[0].clientX : event.clientX;
+      const clientY =
+        "touches" in event ? event.touches[0].clientY : event.clientY;
+      return {
+        x: clientX - rect.left,
+        y: clientY - rect.top,
+      };
+    };
+
+    const handlePointerDown = (event) => {
+      if (startedRef.current || winnerFoundRef.current) return;
+
+      const { x, y } = getPointerPosition(event);
+
+      // Find the top-most entity under the pointer (iterate from end)
+      for (let i = entities.length - 1; i >= 0; i -= 1) {
+        const entity = entities[i];
+        if (
+          x >= entity.x &&
+          x <= entity.x + ENTITY_SIZE &&
+          y >= entity.y &&
+          y <= entity.y + ENTITY_SIZE
+        ) {
+          isDragging = true;
+          dragIndex = i;
+          dragOffsetX = x - entity.x;
+          dragOffsetY = y - entity.y;
+          canvas.style.cursor = "grabbing";
+          event.preventDefault();
+          break;
+        }
+      }
+    };
+
+    const handlePointerMove = (event) => {
+      if (isDragging) {
+        const entity = entities[dragIndex];
+        if (!entity) return;
+
+        const { x, y } = getPointerPosition(event);
+        const width = canvas.clientWidth;
+        const height = canvas.clientHeight;
+
+        let nextX = x - dragOffsetX;
+        let nextY = y - dragOffsetY;
+
+        // Clamp inside canvas bounds
+        nextX = Math.max(0, Math.min(nextX, width - ENTITY_SIZE));
+        nextY = Math.max(0, Math.min(nextY, height - ENTITY_SIZE));
+
+        entity.x = nextX;
+        entity.y = nextY;
+
+        drawFrame();
+        event.preventDefault();
+        return;
+      }
+
+      // If not dragging and simulation hasn't started, update hover cursor
+      if (startedRef.current || winnerFoundRef.current) return;
+
+      const { x, y } = getPointerPosition(event);
+      let hovering = false;
+
+      for (let i = entities.length - 1; i >= 0; i -= 1) {
+        const entity = entities[i];
+        if (
+          x >= entity.x &&
+          x <= entity.x + ENTITY_SIZE &&
+          y >= entity.y &&
+          y <= entity.y + ENTITY_SIZE
+        ) {
+          hovering = true;
+          break;
+        }
+      }
+
+      canvas.style.cursor = hovering ? "grab" : "default";
+    };
+
+    const stopDragging = () => {
+      isDragging = false;
+      dragIndex = -1;
+      if (!startedRef.current && !winnerFoundRef.current) {
+        canvas.style.cursor = "grab";
+      } else {
+        canvas.style.cursor = "default";
+      }
+    };
+
+    const handlePointerUp = () => {
+      if (!isDragging) return;
+      stopDragging();
+    };
+
+    const handlePointerLeave = () => {
+      if (!isDragging) return;
+      stopDragging();
+    };
+
+    canvas.addEventListener("mousedown", handlePointerDown);
+    canvas.addEventListener("mousemove", handlePointerMove);
+    canvas.addEventListener("mouseup", handlePointerUp);
+    canvas.addEventListener("mouseleave", handlePointerLeave);
+    canvas.addEventListener("touchstart", handlePointerDown, {
+      passive: false,
+    });
+    canvas.addEventListener("touchmove", handlePointerMove, { passive: false });
+    canvas.addEventListener("touchend", handlePointerUp);
+    canvas.addEventListener("touchcancel", handlePointerLeave);
+
     // Load all entity images, then prepare the animation
     let loadedCount = 0;
     const totalToLoad = entities.length;
@@ -145,15 +278,7 @@ const Game = () => {
       randomizeEntities();
 
       // Draw initial static frame
-      const width = canvas.clientWidth;
-      const height = canvas.clientHeight;
-      ctx.clearRect(0, 0, width, height);
-      entities.forEach((entity) => {
-        const { x, y, img } = entity;
-        if (img) {
-          ctx.drawImage(img, x, y, ENTITY_SIZE, ENTITY_SIZE);
-        }
-      });
+      drawFrame();
 
       const animate = () => {
         resizeCanvasToDisplaySize();
@@ -274,6 +399,15 @@ const Game = () => {
       if (animationFrameId) {
         cancelAnimationFrame(animationFrameId);
       }
+
+      canvas.removeEventListener("mousedown", handlePointerDown);
+      canvas.removeEventListener("mousemove", handlePointerMove);
+      canvas.removeEventListener("mouseup", handlePointerUp);
+      canvas.removeEventListener("mouseleave", handlePointerLeave);
+      canvas.removeEventListener("touchstart", handlePointerDown);
+      canvas.removeEventListener("touchmove", handlePointerMove);
+      canvas.removeEventListener("touchend", handlePointerUp);
+      canvas.removeEventListener("touchcancel", handlePointerLeave);
     };
   }, [resetToken]);
 
@@ -294,6 +428,7 @@ const Game = () => {
       if (ctx) {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
       }
+      canvas.style.cursor = "default";
     }
 
     // Reset state and refs
