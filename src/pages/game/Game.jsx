@@ -48,7 +48,7 @@ const Game = () => {
     if (!ctx) return;
 
     let animationFrameId;
-    const ENTITY_SIZE = 100;
+    const ENTITY_SIZE = 50;
 
     // Create 10 entities of each type (positions and velocities randomized later)
     const createEntities = () => {
