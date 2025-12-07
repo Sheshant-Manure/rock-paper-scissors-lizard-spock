@@ -176,11 +176,16 @@ const Game = () => {
 
         drawFrame();
         event.preventDefault();
+        // Keep cursor as "grabbing" during drag
+        canvas.style.cursor = "grabbing";
         return;
       }
 
       // If not dragging and simulation hasn't started, update hover cursor
-      if (startedRef.current || winnerFoundRef.current) return;
+      if (startedRef.current || winnerFoundRef.current) {
+        canvas.style.cursor = "default";
+        return;
+      }
 
       const { x, y } = getPointerPosition(event);
       let hovering = false;
@@ -201,24 +206,56 @@ const Game = () => {
       canvas.style.cursor = hovering ? "grab" : "default";
     };
 
-    const stopDragging = () => {
+    const stopDragging = (event) => {
       isDragging = false;
       dragIndex = -1;
+
       if (!startedRef.current && !winnerFoundRef.current) {
-        canvas.style.cursor = "grab";
+        // After release, check if we're still hovering over an item
+        if (event) {
+          const { x, y } = getPointerPosition(event);
+          let hovering = false;
+
+          for (let i = entities.length - 1; i >= 0; i -= 1) {
+            const entity = entities[i];
+            if (
+              x >= entity.x &&
+              x <= entity.x + ENTITY_SIZE &&
+              y >= entity.y &&
+              y <= entity.y + ENTITY_SIZE
+            ) {
+              hovering = true;
+              break;
+            }
+          }
+
+          canvas.style.cursor = hovering ? "grab" : "default";
+        } else {
+          // If no event (e.g., mouseleave), default to "grab" if game hasn't started
+          canvas.style.cursor = "grab";
+        }
       } else {
         canvas.style.cursor = "default";
       }
     };
 
-    const handlePointerUp = () => {
+    const handlePointerUp = (event) => {
       if (!isDragging) return;
-      stopDragging();
+      stopDragging(event);
     };
 
     const handlePointerLeave = () => {
-      if (!isDragging) return;
-      stopDragging();
+      if (!isDragging) {
+        // Even if not dragging, reset cursor when leaving canvas
+        if (!startedRef.current && !winnerFoundRef.current) {
+          canvas.style.cursor = "default";
+        }
+        return;
+      }
+      // On pointer leave during drag, just stop dragging without checking hover
+      isDragging = false;
+      dragIndex = -1;
+      canvas.style.cursor = "default";
     };
 
     canvas.addEventListener("mousedown", handlePointerDown);
@@ -279,6 +316,11 @@ const Game = () => {
 
       // Draw initial static frame
       drawFrame();
+
+      // Set initial cursor to "grab" if game hasn't started
+      if (!startedRef.current && !winnerFoundRef.current) {
+        canvas.style.cursor = "grab";
+      }
 
       const animate = () => {
         resizeCanvasToDisplaySize();
@@ -415,6 +457,11 @@ const Game = () => {
     if (startedRef.current) return;
     startedRef.current = true;
     setStarted(true);
+    // Change cursor to default when game starts
+    const canvas = canvasRef.current;
+    if (canvas) {
+      canvas.style.cursor = "default";
+    }
     if (startAnimationRef.current) {
       startAnimationRef.current();
     }
@@ -428,7 +475,8 @@ const Game = () => {
       if (ctx) {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
       }
-      canvas.style.cursor = "default";
+      // Reset cursor to "grab" after reset (game hasn't started yet)
+      canvas.style.cursor = "grab";
     }
 
     // Reset state and refs
