@@ -33,6 +33,10 @@ const createConfettiConfig = () =>
 const Game = () => {
   const canvasRef = useRef(null);
   const startAnimationRef = useRef(null);
+  const animationFrameIdRef = useRef(null);
+  const randomizeEntitiesRef = useRef(null);
+  const resetEntitiesRef = useRef(null);
+  const drawFrameRef = useRef(null);
   const startedRef = useRef(false);
   const winnerFoundRef = useRef(false);
   const [started, setStarted] = useState(false);
@@ -81,6 +85,15 @@ const Game = () => {
 
     const entities = createEntities();
 
+    // Store original entity types for reset
+    const originalEntityTypes = entities.map((entity) => ({
+      name: entity.name,
+      src: entity.src,
+    }));
+
+    // Create a map of entity type names to their images for reset
+    const entityTypeImageMap = new Map();
+
     // Match canvas internal size to its displayed size for sharp rendering
     const resizeCanvasToDisplaySize = () => {
       const { clientWidth, clientHeight } = canvas;
@@ -117,6 +130,8 @@ const Game = () => {
         }
       });
     };
+
+    drawFrameRef.current = drawFrame;
 
     const getPointerPosition = (event) => {
       const rect = canvas.getBoundingClientRect();
@@ -291,6 +306,39 @@ const Game = () => {
       });
     };
 
+    const resetEntities = () => {
+      const width = canvas.clientWidth;
+      const height = canvas.clientHeight;
+      if (!width || !height) return;
+
+      // Reset entities to original types and randomize positions
+      entities.forEach((entity, index) => {
+        const original = originalEntityTypes[index];
+        if (original) {
+          entity.name = original.name;
+          entity.src = original.src;
+          // Reuse the image from the map
+          const img = entityTypeImageMap.get(original.name);
+          if (img) {
+            entity.img = img;
+          }
+        }
+
+        // Random position within bounds
+        entity.x = Math.random() * (width - ENTITY_SIZE);
+        entity.y = Math.random() * (height - ENTITY_SIZE);
+
+        // Random direction & speed
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 1.5 + Math.random() * 1.5; // between ~1.5 and 3
+        entity.vx = Math.cos(angle) * speed;
+        entity.vy = Math.sin(angle) * speed;
+      });
+    };
+
+    randomizeEntitiesRef.current = randomizeEntities;
+    resetEntitiesRef.current = resetEntities;
+
     const tryStartAnimation = () => {
       if (loadedCount < totalToLoad) return;
 
@@ -413,16 +461,19 @@ const Game = () => {
           if (onlyName) {
             setWinner(onlyName);
           }
+          animationFrameIdRef.current = null;
           return; // stop scheduling new frames
         }
 
         animationFrameId = requestAnimationFrame(animate);
+        animationFrameIdRef.current = animationFrameId;
       };
 
       // Expose a function to start the animation when the user clicks "Start"
       startAnimationRef.current = () => {
-        if (!animationFrameId) {
-          animate();
+        if (!animationFrameIdRef.current) {
+          animationFrameId = requestAnimationFrame(animate);
+          animationFrameIdRef.current = animationFrameId;
         }
       };
     };
@@ -431,6 +482,10 @@ const Game = () => {
       const img = new Image();
       img.src = entity.src;
       entity.img = img;
+      // Store image in map for reset functionality
+      if (!entityTypeImageMap.has(entity.name)) {
+        entityTypeImageMap.set(entity.name, img);
+      }
       img.onload = () => {
         loadedCount += 1;
         tryStartAnimation();
@@ -438,8 +493,9 @@ const Game = () => {
     });
 
     return () => {
-      if (animationFrameId) {
-        cancelAnimationFrame(animationFrameId);
+      if (animationFrameIdRef.current) {
+        cancelAnimationFrame(animationFrameIdRef.current);
+        animationFrameIdRef.current = null;
       }
 
       canvas.removeEventListener("mousedown", handlePointerDown);
@@ -467,7 +523,55 @@ const Game = () => {
     }
   };
 
+  const handlePause = () => {
+    // Stop the animation
+    if (animationFrameIdRef.current) {
+      cancelAnimationFrame(animationFrameIdRef.current);
+      animationFrameIdRef.current = null;
+    }
+
+    // Reset state
+    startedRef.current = false;
+    setStarted(false);
+
+    // Change cursor back to grab
+    const canvas = canvasRef.current;
+    if (canvas) {
+      canvas.style.cursor = "grab";
+    }
+  };
+
+  const handleStop = () => {
+    // Stop the animation
+    if (animationFrameIdRef.current) {
+      cancelAnimationFrame(animationFrameIdRef.current);
+      animationFrameIdRef.current = null;
+    }
+
+    // Reset entities to original types with new random positions and redraw
+    if (resetEntitiesRef.current && drawFrameRef.current) {
+      const canvas = canvasRef.current;
+      if (canvas) {
+        resetEntitiesRef.current();
+        drawFrameRef.current();
+        canvas.style.cursor = "grab";
+      }
+    }
+
+    // Reset state
+    startedRef.current = false;
+    winnerFoundRef.current = false;
+    setStarted(false);
+    setWinner(null);
+  };
+
   const handleReset = () => {
+    // Stop the animation if running
+    if (animationFrameIdRef.current) {
+      cancelAnimationFrame(animationFrameIdRef.current);
+      animationFrameIdRef.current = null;
+    }
+
     // Clear canvas
     const canvas = canvasRef.current;
     if (canvas) {
@@ -492,14 +596,24 @@ const Game = () => {
       <canvas className={s.canvas} ref={canvasRef}>
         Your browser does not support the canvas element.
       </canvas>
-      <button
-        type="button"
-        className={s.startButton}
-        onClick={handleStart}
-        disabled={started}
-      >
-        {started ? "Running..." : "Start"}
-      </button>
+      {winner ? (
+        <button type="button" className={s.startButton} onClick={handleReset}>
+          Play Again
+        </button>
+      ) : started ? (
+        <div className={s.buttonGroup}>
+          <button type="button" className={s.pauseButton} onClick={handlePause}>
+            Pause
+          </button>
+          <button type="button" className={s.stopButton} onClick={handleStop}>
+            Stop
+          </button>
+        </div>
+      ) : (
+        <button type="button" className={s.startButton} onClick={handleStart}>
+          Start
+        </button>
+      )}
       {winner && (
         <div className={s.winnerOverlay}>
           <div className={s.winnerText}>{winner.toUpperCase()} WINS!</div>
@@ -520,9 +634,6 @@ const Game = () => {
               />
             ))}
           </div>
-          <button type="button" className={s.resetButton} onClick={handleReset}>
-            Clear &amp; Restart
-          </button>
         </div>
       )}
     </div>
